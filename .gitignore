@@ -4,3 +4,7 @@ node_modules
 .env*.local
 .vscode/.server-controller-port.log
 .DS_Store
+
+# vault sync (local machine config + logs)
+*.log
+ops/*.plist
