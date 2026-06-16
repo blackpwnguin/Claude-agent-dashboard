@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,7 +22,7 @@ function StatusPill({ status, count }: { status: Column; count: number }) {
 }
 
 export default async function TasksPage() {
-  const { data } = await supabaseAdmin
+  const { data } = await getSupabaseAdmin()
     .from('tasks')
     .select('*')
     .neq('status', 'archived')

@@ -1,4 +1,4 @@
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,10 +38,11 @@ function fmtDate(d?: string | null): string {
 }
 
 export default async function DashboardPage() {
+  const supabase = getSupabaseAdmin()
   const [projectsRes, tasksRes, sessionsRes] = await Promise.all([
-    supabaseAdmin.from('projects').select('*').order('slug', { ascending: true }),
-    supabaseAdmin.from('tasks').select('*').eq('status', 'building'),
-    supabaseAdmin
+    supabase.from('projects').select('*').order('slug', { ascending: true }),
+    supabase.from('tasks').select('*').eq('status', 'building'),
+    supabase
       .from('sessions')
       .select('*')
       .order('created_at', { ascending: false })

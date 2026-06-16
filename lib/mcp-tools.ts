@@ -1,4 +1,4 @@
-import { supabaseAdmin } from './supabase'
+import { getSupabaseAdmin } from './supabase'
 
 export type MCPResponse = {
   ok: boolean
@@ -31,7 +31,7 @@ export async function handleMCPTool(req: MCPRequest): Promise<MCPResponse> {
 }
 
 async function getProjects(): Promise<MCPResponse> {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('projects')
     .select('*')
     .order('slug', { ascending: true })
@@ -40,7 +40,7 @@ async function getProjects(): Promise<MCPResponse> {
 }
 
 async function getTasks(params: { project_slug?: string; status?: string }): Promise<MCPResponse> {
-  let query = supabaseAdmin.from('tasks').select('*')
+  let query = getSupabaseAdmin().from('tasks').select('*')
   if (params.project_slug) query = query.eq('project_slug', params.project_slug)
   if (params.status) query = query.eq('status', params.status)
   const { data, error } = await query.order('updated_at', { ascending: false })
@@ -51,7 +51,7 @@ async function getTasks(params: { project_slug?: string; status?: string }): Pro
 async function updateTask(params: { id?: string; [k: string]: any }): Promise<MCPResponse> {
   if (!params.id) return { ok: false, error: 'id is required' }
   const { id, ...updates } = params
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('tasks')
     .update(updates)
     .eq('id', id)
@@ -75,7 +75,7 @@ async function createTask(params: {
     source: 'portal',
     ...params,
   }
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('tasks')
     .insert(insert)
     .select()
@@ -86,7 +86,7 @@ async function createTask(params: {
 
 async function logSession(params: { agent?: string; [k: string]: any }): Promise<MCPResponse> {
   if (!params.agent) return { ok: false, error: 'agent is required' }
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('sessions')
     .insert(params)
     .select()
