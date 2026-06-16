@@ -5,13 +5,15 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "sync-vault": "tsx scripts/sync-vault.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.43.0",
+    "gray-matter": "^4.0.3",
     "next": "14.2.35",
     "react": "^18",
-    "react-dom": "^18",
-    "@supabase/supabase-js": "^2.43.0"
+    "react-dom": "^18"
   },
   "devDependencies": {
     "@types/node": "^20",
@@ -20,6 +22,7 @@
     "autoprefixer": "^10.0.1",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.22.4",
     "typescript": "^5"
   }
 }
