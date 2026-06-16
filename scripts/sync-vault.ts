@@ -78,6 +78,20 @@ function normalizeStage(raw: unknown): string | null {
   return value && value !== '-' ? value : null
 }
 
+/**
+ * Coerce a frontmatter `updated` value into ISO 8601 for Postgres.
+ * YAML parses unquoted dates (e.g. `updated: 2026-06-10`) into a JS Date, whose
+ * default string form ("...GMT-0400...") Postgres can't parse.
+ */
+function toISODate(raw: unknown): string {
+  if (raw instanceof Date && !isNaN(raw.getTime())) return raw.toISOString()
+  if (raw) {
+    const d = new Date(String(raw))
+    if (!isNaN(d.getTime())) return d.toISOString()
+  }
+  return new Date().toISOString()
+}
+
 /** First Markdown H1 ("# Title") in the body, or null. */
 function firstH1(content: string): string | null {
   const m = content.match(/^#\s+(.+?)\s*$/m)
@@ -100,7 +114,7 @@ async function upsertProject(
     display_name: data.display_name ?? data.title ?? firstH1(content) ?? slug,
     status: normalizeStatus(data.status),
     stage: normalizeStage(data.stage),
-    updated_at: data.updated ? String(data.updated) : new Date().toISOString(),
+    updated_at: toISODate(data.updated),
   }
   const { error } = await getSupabaseAdmin()
     .from('projects')
@@ -156,7 +170,7 @@ async function upsertTask(
     status: normalizeStatus(data.status),
     stage: normalizeStage(data.stage),
     source: 'vault',
-    updated_at: data.updated ? String(data.updated) : new Date().toISOString(),
+    updated_at: toISODate(data.updated),
   }
 
   const result = existing
