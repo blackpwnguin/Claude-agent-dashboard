@@ -37,6 +37,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           >
             Tasks
           </Link>
+          <Link
+            href="/activity"
+            className="px-3 py-2 rounded text-sm transition-colors hover:bg-[var(--bg-elevated)]"
+            style={{ color: 'var(--text-secondary)' }}
+          >
+            Activity
+          </Link>
         </nav>
         <div className="px-5 py-4 mono text-[11px]" style={{ color: 'var(--text-muted)' }}>
           /api/mcp ↗

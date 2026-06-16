@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "sync-vault": "tsx scripts/sync-vault.ts"
+    "sync-vault": "tsx scripts/sync-vault.ts",
+    "log-session": "tsx scripts/log-session.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.43.0",

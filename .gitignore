@@ -8,3 +8,4 @@ node_modules
 # vault sync (local machine config + logs)
 *.log
 ops/*.plist
+tsconfig.tsbuildinfo

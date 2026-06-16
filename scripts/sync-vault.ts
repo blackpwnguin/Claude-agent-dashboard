@@ -4,11 +4,14 @@
  * Crawls an Obsidian knowledge vault, parses YAML frontmatter from markdown
  * notes, and upserts the results into Supabase.
  *
- *   - `type: project-overview` -> upsert into `projects` (conflict on `slug`)
- *   - `type: spec`             -> upsert into `tasks` (matched on project_slug + title)
+ *   - `type: project-overview` -> upsert into `projects`    (conflict on `slug`)
+ *   - `type: spec`             -> upsert into `tasks`       (matched on project_slug + title)
+ *   - `type: decision`         -> upsert into `decisions`   (matched on project_slug + title)
+ *   - `type: build-log`        -> upsert into `build_logs`  (matched on project_slug + title)
  *   - `STATUS.md` per workspace -> updates the matching `projects` row
  *
- * Run with:  npm run sync-vault   (needs VAULT_PATH + Supabase env vars)
+ * `source: portal` rows are never overwritten. Run with: npm run sync-vault
+ * (needs VAULT_PATH + Supabase env vars; see .env.local).
  */
 
 import fs from 'node:fs'
@@ -16,8 +19,8 @@ import path from 'node:path'
 import matter from 'gray-matter'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
-// Workspaces we crawl. Everything else (_reference, _templates, homelab) is skipped.
-const WORKSPACES = ['nihilo', 'oikos', 'stowed'] as const
+// Workspaces we crawl. Everything else (_reference, _templates) is skipped.
+const WORKSPACES = ['nihilo', 'oikos', 'stowed', 'homelab'] as const
 
 const VALID_STATUSES = ['spec', 'building', 'shipped', 'archived'] as const
 type Status = (typeof VALID_STATUSES)[number]
@@ -26,6 +29,8 @@ type Summary = {
   filesScanned: number
   projectsUpserted: number
   tasksUpserted: number
+  decisionsUpserted: number
+  buildLogsUpserted: number
   skipped: number
   errors: number
   portalProtected: number
@@ -98,6 +103,21 @@ function firstH1(content: string): string | null {
   return m ? m[1].trim() : null
 }
 
+/** First real paragraph (skips leading headings), capped, for a summary blurb. */
+function firstParagraph(content: string): string | null {
+  const buf: string[] = []
+  for (const line of content.split('\n')) {
+    const t = line.trim()
+    if (!t || t.startsWith('#')) {
+      if (buf.length) break
+      continue
+    }
+    buf.push(t)
+  }
+  const p = buf.join(' ').trim()
+  return p ? p.slice(0, 500) : null
+}
+
 async function upsertProject(
   data: Record<string, any>,
   content: string,
@@ -114,6 +134,7 @@ async function upsertProject(
     display_name: data.display_name ?? data.title ?? firstH1(content) ?? slug,
     status: normalizeStatus(data.status),
     stage: normalizeStage(data.stage),
+    summary: firstParagraph(content),
     updated_at: toISODate(data.updated),
   }
   const { error } = await getSupabaseAdmin()
@@ -128,7 +149,15 @@ async function upsertProject(
   console.log(`  ✓ project: ${slug}`)
 }
 
-async function upsertTask(
+/**
+ * Upsert a note keyed on (project_slug, title) into a child table. Shared by
+ * specs->tasks, decisions->decisions, build-logs->build_logs. Portal-safe.
+ */
+async function upsertNote(
+  table: 'tasks' | 'decisions' | 'build_logs',
+  label: string,
+  counter: 'tasksUpserted' | 'decisionsUpserted' | 'buildLogsUpserted',
+  withSummary: boolean,
   data: Record<string, any>,
   content: string,
   summary: Summary,
@@ -136,35 +165,33 @@ async function upsertTask(
   const projectSlug = String(data.project ?? '').trim()
   const title = firstH1(content)
   if (!projectSlug || !title) {
-    console.warn('  ! spec note missing project or H1 title — skipping')
+    console.warn(`  ! ${label} note missing project or H1 title — skipping`)
     summary.skipped++
     return
   }
 
   const admin = getSupabaseAdmin()
 
-  // Look up an existing row on the natural key (project_slug, title).
   const { data: existing, error: lookupError } = await admin
-    .from('tasks')
+    .from(table)
     .select('id, source')
     .eq('project_slug', projectSlug)
     .eq('title', title)
     .maybeSingle()
   if (lookupError) {
-    console.error(`  x task lookup failed (${projectSlug} / ${title}): ${lookupError.message}`)
+    console.error(`  x ${label} lookup failed (${projectSlug} / ${title}): ${lookupError.message}`)
     summary.errors++
     return
   }
 
-  // Never overwrite a row owned by the portal.
   if (existing && existing.source === 'portal') {
-    console.log(`  · skip portal-owned task: ${projectSlug} / ${title}`)
+    console.log(`  · skip portal-owned ${label}: ${projectSlug} / ${title}`)
     summary.portalProtected++
     summary.skipped++
     return
   }
 
-  const fields = {
+  const fields: Record<string, any> = {
     project_slug: projectSlug,
     title,
     status: normalizeStatus(data.status),
@@ -172,17 +199,18 @@ async function upsertTask(
     source: 'vault',
     updated_at: toISODate(data.updated),
   }
+  if (withSummary) fields.summary = firstParagraph(content)
 
   const result = existing
-    ? await admin.from('tasks').update(fields).eq('id', existing.id)
-    : await admin.from('tasks').insert(fields)
+    ? await admin.from(table).update(fields).eq('id', existing.id)
+    : await admin.from(table).insert(fields)
   if (result.error) {
-    console.error(`  x task upsert failed (${projectSlug} / ${title}): ${result.error.message}`)
+    console.error(`  x ${label} upsert failed (${projectSlug} / ${title}): ${result.error.message}`)
     summary.errors++
     return
   }
-  summary.tasksUpserted++
-  console.log(`  ✓ task: ${projectSlug} / ${title}`)
+  summary[counter]++
+  console.log(`  ✓ ${label}: ${projectSlug} / ${title}`)
 }
 
 /** Read `<workspace>/STATUS.md` and patch the matching projects row. */
@@ -235,6 +263,8 @@ async function main(): Promise<void> {
     filesScanned: 0,
     projectsUpserted: 0,
     tasksUpserted: 0,
+    decisionsUpserted: 0,
+    buildLogsUpserted: 0,
     skipped: 0,
     errors: 0,
     portalProtected: 0,
@@ -266,10 +296,16 @@ async function main(): Promise<void> {
           await upsertProject(parsed.data, parsed.content, summary)
           break
         case 'spec':
-          await upsertTask(parsed.data, parsed.content, summary)
+          await upsertNote('tasks', 'task', 'tasksUpserted', false, parsed.data, parsed.content, summary)
+          break
+        case 'decision':
+          await upsertNote('decisions', 'decision', 'decisionsUpserted', true, parsed.data, parsed.content, summary)
+          break
+        case 'build-log':
+          await upsertNote('build_logs', 'build-log', 'buildLogsUpserted', true, parsed.data, parsed.content, summary)
           break
         default:
-          // Has frontmatter but not a synced type (build-log, decision, reference…).
+          // Has frontmatter but not a synced type (reference, index, audit…).
           summary.skipped++
       }
     }
@@ -279,11 +315,13 @@ async function main(): Promise<void> {
   }
 
   console.log('\n── vault sync summary ──────────────────')
-  console.log(`  files scanned     : ${summary.filesScanned}`)
-  console.log(`  projects upserted : ${summary.projectsUpserted}`)
-  console.log(`  tasks upserted    : ${summary.tasksUpserted}`)
-  console.log(`  skipped           : ${summary.skipped} (incl. ${summary.portalProtected} portal-owned)`)
-  console.log(`  errors            : ${summary.errors}`)
+  console.log(`  files scanned      : ${summary.filesScanned}`)
+  console.log(`  projects upserted  : ${summary.projectsUpserted}`)
+  console.log(`  tasks upserted     : ${summary.tasksUpserted}`)
+  console.log(`  decisions upserted : ${summary.decisionsUpserted}`)
+  console.log(`  build-logs upserted: ${summary.buildLogsUpserted}`)
+  console.log(`  skipped            : ${summary.skipped} (incl. ${summary.portalProtected} portal-owned)`)
+  console.log(`  errors             : ${summary.errors}`)
   console.log('────────────────────────────────────────')
 
   if (summary.errors > 0) process.exit(1)

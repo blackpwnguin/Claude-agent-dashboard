@@ -31,6 +31,8 @@ export async function GET() {
     tools: [
       { name: 'get_projects', description: 'List all projects with current status' },
       { name: 'get_tasks', description: 'List tasks, filterable by project_slug and status' },
+      { name: 'get_decisions', description: 'List decisions, filterable by project_slug and status' },
+      { name: 'get_build_logs', description: 'List build-logs, filterable by project_slug and status' },
       { name: 'update_task', description: 'Update a task by id' },
       { name: 'create_task', description: 'Create a new task record' },
       { name: 'log_session', description: 'Log a Claude Code or Cowork session with token count' },

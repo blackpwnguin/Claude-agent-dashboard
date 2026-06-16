@@ -19,6 +19,10 @@ export async function handleMCPTool(req: MCPRequest): Promise<MCPResponse> {
       return getProjects()
     case 'get_tasks':
       return getTasks(params)
+    case 'get_decisions':
+      return getChildRows('decisions', params)
+    case 'get_build_logs':
+      return getChildRows('build_logs', params)
     case 'update_task':
       return updateTask(params)
     case 'create_task':
@@ -41,6 +45,18 @@ async function getProjects(): Promise<MCPResponse> {
 
 async function getTasks(params: { project_slug?: string; status?: string }): Promise<MCPResponse> {
   let query = getSupabaseAdmin().from('tasks').select('*')
+  if (params.project_slug) query = query.eq('project_slug', params.project_slug)
+  if (params.status) query = query.eq('status', params.status)
+  const { data, error } = await query.order('updated_at', { ascending: false })
+  if (error) return { ok: false, error: error.message }
+  return { ok: true, data }
+}
+
+async function getChildRows(
+  table: 'decisions' | 'build_logs',
+  params: { project_slug?: string; status?: string },
+): Promise<MCPResponse> {
+  let query = getSupabaseAdmin().from(table).select('*')
   if (params.project_slug) query = query.eq('project_slug', params.project_slug)
   if (params.status) query = query.eq('status', params.status)
   const { data, error } = await query.order('updated_at', { ascending: false })
