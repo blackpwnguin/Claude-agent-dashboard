@@ -1,0 +1,6 @@
+node_modules
+.next
+.env.local
+.env*.local
+.vscode/.server-controller-port.log
+.DS_Store
