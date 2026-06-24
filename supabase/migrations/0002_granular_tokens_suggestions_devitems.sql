@@ -5,6 +5,7 @@
 -- ── 1. Granular token columns on sessions ────────────────────────────────────
 -- Add breakdown columns alongside the existing `tokens` total so old data
 -- remains intact while new sessions log full detail.
+alter table sessions add column if not exists tokens            integer;
 alter table sessions add column if not exists input_tokens      integer;
 alter table sessions add column if not exists output_tokens     integer;
 alter table sessions add column if not exists cache_read_tokens integer;
