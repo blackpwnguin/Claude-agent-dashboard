@@ -24,46 +24,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             Dashboard
           </Link>
           <Link
-            href="/projects"
+            href="/dashboard/projects"
             className="px-3 py-2 rounded text-sm transition-colors hover:bg-[var(--bg-elevated)]"
             style={{ color: 'var(--text-secondary)' }}
           >
             Projects
           </Link>
           <Link
-            href="/tasks"
+            href="/dashboard/tasks"
             className="px-3 py-2 rounded text-sm transition-colors hover:bg-[var(--bg-elevated)]"
             style={{ color: 'var(--text-secondary)' }}
           >
             Tasks
-          </Link>
-          <Link
-            href="/dev-items"
-            className="px-3 py-2 rounded text-sm transition-colors hover:bg-[var(--bg-elevated)]"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            Dev Items
-          </Link>
-          <Link
-            href="/suggestions"
-            className="px-3 py-2 rounded text-sm transition-colors hover:bg-[var(--bg-elevated)]"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            AI Suggestions
-          </Link>
-          <Link
-            href="/tokens"
-            className="px-3 py-2 rounded text-sm transition-colors hover:bg-[var(--bg-elevated)]"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            Token Usage
-          </Link>
-          <Link
-            href="/activity"
-            className="px-3 py-2 rounded text-sm transition-colors hover:bg-[var(--bg-elevated)]"
-            style={{ color: 'var(--text-secondary)' }}
-          >
-            Activity
           </Link>
         </nav>
         <div className="px-5 py-4 mono text-[11px]" style={{ color: 'var(--text-muted)' }}>

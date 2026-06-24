@@ -6,8 +6,13 @@
  * so the Activity page reflects real token usage.
  *
  * Usage:
- *   npm run log-session -- --agent "claude-code" --tokens 48213 \
- *     --summary "stowed auth wiring" --project stowed
+ *   npm run log-session -- --agent "claude-code" --model "claude-sonnet-4-6" \
+ *     --input_tokens 12500 --output_tokens 4800 \
+ *     --cache_read_tokens 30000 --cache_write_tokens 2000 \
+ *     --cost_usd 0.0342 \
+ *     --summary "stowed auth wiring" --project stowed --topic "auth-wiring-2026-06-23"
+ *
+ * Legacy: --tokens <total> still works as a fallback total.
  *
  * Env (from .env.local): PORTAL_API_KEY (required), DASHBOARD_URL (optional,
  * defaults to the deployed dashboard).
@@ -68,9 +73,16 @@ async function main(): Promise<void> {
   }
 
   const params: Record<string, unknown> = { agent: args.agent }
-  if (args.tokens) params.tokens = Number(args.tokens)
-  if (args.summary) params.summary = args.summary
-  if (args.project) params.project_slug = args.project
+  if (args.tokens)             params.tokens             = Number(args.tokens)
+  if (args.input_tokens)       params.input_tokens       = Number(args.input_tokens)
+  if (args.output_tokens)      params.output_tokens      = Number(args.output_tokens)
+  if (args.cache_read_tokens)  params.cache_read_tokens  = Number(args.cache_read_tokens)
+  if (args.cache_write_tokens) params.cache_write_tokens = Number(args.cache_write_tokens)
+  if (args.cost_usd)           params.cost_usd           = Number(args.cost_usd)
+  if (args.model)              params.model              = args.model
+  if (args.summary)            params.summary            = args.summary
+  if (args.project)            params.project_slug       = args.project
+  if (args.topic)              params.topic              = args.topic
 
   const res = await fetch(`${baseUrl}/api/mcp`, {
     method: 'POST',

@@ -4,10 +4,13 @@
  * Crawls an Obsidian knowledge vault, parses YAML frontmatter from markdown
  * notes, and upserts the results into Supabase.
  *
- *   - `type: project-overview` -> upsert into `projects`    (conflict on `slug`)
- *   - `type: spec`             -> upsert into `tasks`       (matched on project_slug + title)
- *   - `type: decision`         -> upsert into `decisions`   (matched on project_slug + title)
- *   - `type: build-log`        -> upsert into `build_logs`  (matched on project_slug + title)
+ *   - `type: project-overview` -> upsert into `projects`       (conflict on `slug`)
+ *   - `type: spec`             -> upsert into `tasks`          (matched on project_slug + title)
+ *   - `type: decision`         -> upsert into `decisions`      (matched on project_slug + title)
+ *   - `type: build-log`        -> upsert into `build_logs`     (matched on project_slug + title)
+ *   - `type: session`          -> upsert into `sessions`       (matched on project_slug + topic)
+ *   - `type: suggestion`       -> upsert into `ai_suggestions` (matched on project_slug + title)
+ *   - `type: dev-item`         -> upsert into `dev_items`      (matched on project_slug + title)
  *   - `STATUS.md` per workspace -> updates the matching `projects` row
  *
  * `source: portal` rows are never overwritten. Run with: npm run sync-vault
@@ -31,6 +34,9 @@ type Summary = {
   tasksUpserted: number
   decisionsUpserted: number
   buildLogsUpserted: number
+  sessionsUpserted: number
+  suggestionsUpserted: number
+  devItemsUpserted: number
   skipped: number
   errors: number
   portalProtected: number
@@ -213,6 +219,179 @@ async function upsertNote(
   console.log(`  ✓ ${label}: ${projectSlug} / ${title}`)
 }
 
+/** Upsert a session note into the `sessions` table. */
+async function upsertSession(
+  data: Record<string, any>,
+  content: string,
+  summary: Summary,
+): Promise<void> {
+  const projectSlug = String(data.project ?? '').trim()
+  const topic = String(data.topic ?? firstH1(content) ?? '').trim()
+  if (!projectSlug || !topic) {
+    console.warn('  ! session note missing project or topic/H1 — skipping')
+    summary.skipped++
+    return
+  }
+
+  const admin = getSupabaseAdmin()
+
+  // Portal-protected check
+  const { data: existing, error: lookupError } = await admin
+    .from('sessions')
+    .select('id, source')
+    .eq('project_slug', projectSlug)
+    .eq('topic', topic)
+    .maybeSingle()
+  if (lookupError) {
+    console.error(`  x session lookup failed (${projectSlug} / ${topic}): ${lookupError.message}`)
+    summary.errors++
+    return
+  }
+  if (existing && (existing as { source?: string }).source === 'portal') {
+    console.log(`  · skip portal-owned session: ${projectSlug} / ${topic}`)
+    summary.portalProtected++
+    summary.skipped++
+    return
+  }
+
+  const fields: Record<string, any> = {
+    project_slug: projectSlug,
+    topic,
+    agent: String(data.agent ?? 'claude-code'),
+    model: data.model ? String(data.model) : null,
+    tokens: data.tokens ? Number(data.tokens) : null,
+    input_tokens: data.input_tokens ? Number(data.input_tokens) : null,
+    output_tokens: data.output_tokens ? Number(data.output_tokens) : null,
+    cache_read_tokens: data.cache_read_tokens ? Number(data.cache_read_tokens) : null,
+    cache_write_tokens: data.cache_write_tokens ? Number(data.cache_write_tokens) : null,
+    cost_usd: data.cost_usd ? Number(data.cost_usd) : null,
+    summary: firstParagraph(content),
+    tracked: data.tracked !== false,
+    source: 'vault',
+    created_at: toISODate(data.updated ?? data.date),
+  }
+
+  const result = existing
+    ? await admin.from('sessions').update(fields).eq('id', (existing as { id: string }).id)
+    : await admin.from('sessions').insert(fields)
+  if (result.error) {
+    console.error(`  x session upsert failed (${projectSlug} / ${topic}): ${result.error.message}`)
+    summary.errors++
+    return
+  }
+  summary.sessionsUpserted++
+  console.log(`  ✓ session: ${projectSlug} / ${topic}`)
+}
+
+/** Upsert an AI suggestion note into `ai_suggestions`. */
+async function upsertSuggestion(
+  data: Record<string, any>,
+  content: string,
+  summary: Summary,
+): Promise<void> {
+  const projectSlug = String(data.project ?? '').trim()
+  const title = firstH1(content)
+  if (!projectSlug || !title) {
+    console.warn('  ! suggestion note missing project or H1 title — skipping')
+    summary.skipped++
+    return
+  }
+
+  const admin = getSupabaseAdmin()
+
+  const { data: existing, error: lookupError } = await admin
+    .from('ai_suggestions')
+    .select('id, source')
+    .eq('project_slug', projectSlug)
+    .eq('title', title)
+    .maybeSingle()
+  if (lookupError) {
+    console.error(`  x suggestion lookup failed: ${lookupError.message}`)
+    summary.errors++
+    return
+  }
+  if (existing && (existing as { source?: string }).source === 'portal') {
+    summary.portalProtected++; summary.skipped++; return
+  }
+
+  const fields: Record<string, any> = {
+    project_slug: projectSlug,
+    title,
+    body: firstParagraph(content),
+    category: data.category ? String(data.category) : null,
+    priority: data.priority ? String(data.priority) : 'medium',
+    status: data.status ? String(data.status) : 'open',
+    source: 'vault',
+    updated_at: toISODate(data.updated),
+  }
+
+  const result = existing
+    ? await admin.from('ai_suggestions').update(fields).eq('id', (existing as { id: string }).id)
+    : await admin.from('ai_suggestions').insert(fields)
+  if (result.error) {
+    console.error(`  x suggestion upsert failed: ${result.error.message}`)
+    summary.errors++
+    return
+  }
+  summary.suggestionsUpserted++
+  console.log(`  ✓ suggestion: ${projectSlug} / ${title}`)
+}
+
+/** Upsert a dev-item note into `dev_items`. */
+async function upsertDevItem(
+  data: Record<string, any>,
+  content: string,
+  summary: Summary,
+): Promise<void> {
+  const projectSlug = String(data.project ?? '').trim()
+  const title = firstH1(content)
+  if (!projectSlug || !title) {
+    console.warn('  ! dev-item note missing project or H1 title — skipping')
+    summary.skipped++
+    return
+  }
+
+  const admin = getSupabaseAdmin()
+
+  const { data: existing, error: lookupError } = await admin
+    .from('dev_items')
+    .select('id, source')
+    .eq('project_slug', projectSlug)
+    .eq('title', title)
+    .maybeSingle()
+  if (lookupError) {
+    console.error(`  x dev-item lookup failed: ${lookupError.message}`)
+    summary.errors++
+    return
+  }
+  if (existing && (existing as { source?: string }).source === 'portal') {
+    summary.portalProtected++; summary.skipped++; return
+  }
+
+  const fields: Record<string, any> = {
+    project_slug: projectSlug,
+    title,
+    description: firstParagraph(content),
+    item_type: data.item_type ?? data.type_detail ?? 'feature',
+    priority: data.priority ?? 'medium',
+    status: data.status ? String(data.status) : 'open',
+    stage: data.stage ? String(data.stage) : null,
+    source: 'vault',
+    updated_at: toISODate(data.updated),
+  }
+
+  const result = existing
+    ? await admin.from('dev_items').update(fields).eq('id', (existing as { id: string }).id)
+    : await admin.from('dev_items').insert(fields)
+  if (result.error) {
+    console.error(`  x dev-item upsert failed: ${result.error.message}`)
+    summary.errors++
+    return
+  }
+  summary.devItemsUpserted++
+  console.log(`  ✓ dev-item: ${projectSlug} / ${title}`)
+}
+
 /** Read `<workspace>/STATUS.md` and patch the matching projects row. */
 async function applyStatusFile(
   workspace: string,
@@ -265,6 +444,9 @@ async function main(): Promise<void> {
     tasksUpserted: 0,
     decisionsUpserted: 0,
     buildLogsUpserted: 0,
+    sessionsUpserted: 0,
+    suggestionsUpserted: 0,
+    devItemsUpserted: 0,
     skipped: 0,
     errors: 0,
     portalProtected: 0,
@@ -304,6 +486,15 @@ async function main(): Promise<void> {
         case 'build-log':
           await upsertNote('build_logs', 'build-log', 'buildLogsUpserted', true, parsed.data, parsed.content, summary)
           break
+        case 'session':
+          await upsertSession(parsed.data, parsed.content, summary)
+          break
+        case 'suggestion':
+          await upsertSuggestion(parsed.data, parsed.content, summary)
+          break
+        case 'dev-item':
+          await upsertDevItem(parsed.data, parsed.content, summary)
+          break
         default:
           // Has frontmatter but not a synced type (reference, index, audit…).
           summary.skipped++
@@ -315,13 +506,16 @@ async function main(): Promise<void> {
   }
 
   console.log('\n── vault sync summary ──────────────────')
-  console.log(`  files scanned      : ${summary.filesScanned}`)
-  console.log(`  projects upserted  : ${summary.projectsUpserted}`)
-  console.log(`  tasks upserted     : ${summary.tasksUpserted}`)
-  console.log(`  decisions upserted : ${summary.decisionsUpserted}`)
-  console.log(`  build-logs upserted: ${summary.buildLogsUpserted}`)
-  console.log(`  skipped            : ${summary.skipped} (incl. ${summary.portalProtected} portal-owned)`)
-  console.log(`  errors             : ${summary.errors}`)
+  console.log(`  files scanned       : ${summary.filesScanned}`)
+  console.log(`  projects upserted   : ${summary.projectsUpserted}`)
+  console.log(`  tasks upserted      : ${summary.tasksUpserted}`)
+  console.log(`  decisions upserted  : ${summary.decisionsUpserted}`)
+  console.log(`  build-logs upserted : ${summary.buildLogsUpserted}`)
+  console.log(`  sessions upserted   : ${summary.sessionsUpserted}`)
+  console.log(`  suggestions upserted: ${summary.suggestionsUpserted}`)
+  console.log(`  dev-items upserted  : ${summary.devItemsUpserted}`)
+  console.log(`  skipped             : ${summary.skipped} (incl. ${summary.portalProtected} portal-owned)`)
+  console.log(`  errors              : ${summary.errors}`)
   console.log('────────────────────────────────────────')
 
   if (summary.errors > 0) process.exit(1)
