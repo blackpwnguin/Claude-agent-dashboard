@@ -9,7 +9,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       >
         <div className="px-5 py-6">
           <div className="mono text-[11px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-            Claude
+            Hermes / Claude
           </div>
           <div className="text-lg font-semibold mt-1" style={{ color: 'var(--accent)' }}>
             Dashboard
