@@ -23,7 +23,7 @@ import matter from 'gray-matter'
 import { getSupabaseAdmin } from '@/lib/supabase'
 
 // Workspaces we crawl. Everything else (_reference, _templates) is skipped.
-const WORKSPACES = ['nihilo', 'oikos', 'stowed', 'homelab'] as const
+const WORKSPACES = ['nihilo', 'oikos', 'stowed', 'homelab', 'icm-ops'] as const
 
 const VALID_STATUSES = ['spec', 'building', 'shipped', 'archived'] as const
 type Status = (typeof VALID_STATUSES)[number]
