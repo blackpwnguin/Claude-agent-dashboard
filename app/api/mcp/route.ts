@@ -44,6 +44,7 @@ export async function GET() {
       { name: 'update_suggestion', description: 'Update an AI suggestion status/priority' },
       { name: 'update_dev_item',   description: 'Update a dev item status/priority' },
       { name: 'log_session', description: 'Log a session with granular token breakdown (input, output, cache_read, cache_write, cost_usd, model, topic)' },
+      { name: 'trigger_sync', description: 'Dispatch the vault → Supabase sync GitHub Actions workflow immediately. Requires GITHUB_SYNC_TOKEN env var (fine-grained PAT, actions:write on knowledge-vault repo).' },
     ]
   })
 }

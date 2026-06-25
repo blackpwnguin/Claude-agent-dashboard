@@ -45,6 +45,8 @@ export async function handleMCPTool(req: MCPRequest): Promise<MCPResponse> {
       return updateRow('dev_items', params)
     case 'log_session':
       return logSession(params)
+    case 'trigger_sync':
+      return triggerSync()
     default:
       return { ok: false, error: `Unknown tool: ${tool}` }
   }
@@ -190,4 +192,50 @@ async function logSession(params: { agent?: string; [k: string]: any }): Promise
     .single()
   if (error) return { ok: false, error: error.message }
   return { ok: true, data }
+}
+
+/**
+ * trigger_sync — dispatches the GitHub Actions `sync-dashboard` workflow via
+ * workflow_dispatch. Requires the GITHUB_SYNC_TOKEN env var to be set in Vercel
+ * with a fine-grained PAT that has `actions: write` on the knowledge-vault repo.
+ *
+ * Vault repo: blackpwnguin/knowledge-vault  branch: master
+ */
+async function triggerSync(): Promise<MCPResponse> {
+  const token = process.env.GITHUB_SYNC_TOKEN
+  if (!token) {
+    return {
+      ok: false,
+      error:
+        'GITHUB_SYNC_TOKEN is not set. Add a fine-grained GitHub PAT with actions:write on blackpwnguin/knowledge-vault to Vercel env vars.',
+    }
+  }
+
+  const res = await fetch(
+    'https://api.github.com/repos/blackpwnguin/knowledge-vault/actions/workflows/sync-dashboard.yml/dispatches',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ ref: 'master' }),
+    },
+  )
+
+  // GitHub returns 204 No Content on success
+  if (res.status === 204) {
+    return { ok: true, data: { message: 'Sync workflow dispatched. Check GitHub Actions for progress.' } }
+  }
+
+  let detail = ''
+  try {
+    const json = await res.json()
+    detail = json.message ?? JSON.stringify(json)
+  } catch {
+    detail = `HTTP ${res.status}`
+  }
+  return { ok: false, error: `GitHub dispatch failed: ${detail}` }
 }
