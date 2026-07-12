@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "sync-vault": "tsx scripts/sync-vault.ts",
+    "sync-icm": "tsx scripts/sync-icm.ts",
     "log-session": "tsx scripts/log-session.ts"
   },
   "dependencies": {

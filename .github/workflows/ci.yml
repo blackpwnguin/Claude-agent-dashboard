@@ -1,0 +1,30 @@
+# CI — dashboard dev pipeline. Runs on every push and PR: install, typecheck, build.
+# Vercel handles deploy on push to the default branch (see vercel.json); this gate
+# catches breakage before it ships.
+name: ci
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit
+      - name: Build
+        # Build must not require live secrets: pages are force-dynamic, so Supabase
+        # is only touched at request time. Dummy env keeps next build from erroring.
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: build-time-placeholder
+        run: npm run build
